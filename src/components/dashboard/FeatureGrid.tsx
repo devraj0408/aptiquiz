@@ -1,8 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Flame, Users2, LineChart, Monitor, ShieldAlert, Zap, X, ArrowRight } from 'lucide-react';
 
 export const FeatureGrid: React.FC = () => {
   const [activePreview, setActivePreview] = useState<'skills' | 'projector' | 'pressure' | 'relay' | null>(null);
+
+  useEffect(() => {
+    if (!activePreview) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setActivePreview(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activePreview]);
 
   const features = [
     {
@@ -86,25 +107,29 @@ export const FeatureGrid: React.FC = () => {
       </div>
 
       {/* Feature Preview Modal */}
-      {activePreview && (
+      {activePreview && createPortal(
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-[2px] animate-backdrop-fade"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-[2px] animate-backdrop-fade overflow-y-auto"
           onClick={() => setActivePreview(null)}
         >
           <div 
-            className="bg-[var(--surface)] border border-[var(--border)] rounded-[8px] max-w-md w-full p-6 shadow-xl space-y-4 animate-scale-in text-[var(--ink)]"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="preview-modal-title"
+            className="bg-[var(--surface)] border border-[var(--border)] rounded-[8px] max-w-md w-full p-6 shadow-xl space-y-4 animate-scale-in text-[var(--ink)] my-auto"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
               <div className="flex items-center gap-2">
                 {features.find(f => f.id === activePreview)?.icon}
-                <h3 className="font-serif font-bold text-lg">
+                <h3 id="preview-modal-title" className="font-serif font-bold text-lg">
                   {features.find(f => f.id === activePreview)?.title}
                 </h3>
               </div>
               <button
                 onClick={() => setActivePreview(null)}
                 className="p-1 rounded hover:bg-[var(--border)] text-[var(--ink-muted)] transition-colors"
+                aria-label="Close preview"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -178,8 +203,10 @@ export const FeatureGrid: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </section>
   );
 };
+

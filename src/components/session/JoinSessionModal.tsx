@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { JoinSessionPayload } from '../../types';
 import { sessionService, SessionResult } from '../../services/sessionService';
 import { X, LogIn, Check, KeyRound, User, School, ArrowRight } from 'lucide-react';
@@ -25,6 +26,27 @@ export const JoinSessionModal: React.FC<JoinSessionModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SessionResult | null>(null);
 
+  useEffect(() => {
+    if (!isOpen) return;
+
+    // Scroll lock on background page body while modal is active
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    // Dismiss on Escape key press
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -41,14 +63,20 @@ export const JoinSessionModal: React.FC<JoinSessionModalProps> = ({
     }
   };
 
-  return (
+  return createPortal(
     <div 
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-[2px] animate-backdrop-fade overflow-y-auto"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="join-session-modal-title"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[8px] w-full max-w-md shadow-xl flex flex-col max-h-[90vh] my-auto overflow-hidden text-[var(--ink)] animate-scale-in">
+      <div 
+        className="bg-[var(--surface)] border border-[var(--border)] rounded-[8px] w-full max-w-md shadow-xl flex flex-col max-h-[90dvh] my-auto overflow-hidden text-[var(--ink)] animate-scale-in"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Modal Header */}
         <div className="px-6 py-4 border-b border-[var(--border)] flex items-center justify-between bg-[var(--bg)] shrink-0">
           <div className="flex items-center gap-2.5">
@@ -56,7 +84,7 @@ export const JoinSessionModal: React.FC<JoinSessionModalProps> = ({
               <LogIn className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-bold font-serif leading-tight">Join Live Aptitude Session</h2>
+              <h2 id="join-session-modal-title" className="text-base sm:text-lg font-bold font-serif leading-tight">Join Live Aptitude Session</h2>
               <p className="text-[11px] text-[var(--ink-muted)]">Enter session room code & competitor handle</p>
             </div>
           </div>
@@ -64,6 +92,7 @@ export const JoinSessionModal: React.FC<JoinSessionModalProps> = ({
             onClick={onClose}
             className="p-1.5 rounded-md hover:bg-[var(--border)] text-[var(--ink-muted)] hover:text-[var(--ink)] transition-colors"
             title="Close Modal"
+            aria-label="Close modal"
           >
             <X className="w-5 h-5" />
           </button>
@@ -184,6 +213,7 @@ export const JoinSessionModal: React.FC<JoinSessionModalProps> = ({
           </form>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

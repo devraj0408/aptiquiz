@@ -1,20 +1,24 @@
 import React from 'react';
 import { SupabaseStatusBadge } from './SupabaseStatusBadge';
 import { useAuth } from '../../hooks/useAuth';
-import { Zap, BookOpen, Shield, PlusCircle, LogIn, User, LogOut } from 'lucide-react';
+import { isTestingModeEnabled } from '../../config/testingMode';
+import { Zap, BookOpen, Shield, PlusCircle, LogIn, User, LogOut, FlaskConical } from 'lucide-react';
 
 interface HeaderProps {
   onOpenCreateModal: () => void;
   onOpenJoinModal: () => void;
   onOpenAuthModal: () => void;
+  onOpenPractice?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   onOpenCreateModal,
   onOpenJoinModal,
   onOpenAuthModal,
+  onOpenPractice,
 }) => {
   const { user, profile, signOut } = useAuth();
+  const testingMode = isTestingModeEnabled();
 
   return (
     <header className="bg-[var(--surface)] border-b border-[var(--border)] sticky top-0 z-40">
@@ -29,9 +33,16 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="text-xl font-bold font-serif text-[var(--ink)] tracking-tight">
                 AptiQuiz
               </span>
-              <span className="hidden xl:inline-block text-[10px] px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--bg)] text-[var(--ink-muted)] font-mono font-semibold">
-                Live Arena
-              </span>
+              {testingMode ? (
+                <span className="hidden xl:inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border border-[var(--accent)]/40 bg-[var(--warning-tint)] text-[var(--accent)] font-mono font-semibold">
+                  <FlaskConical className="w-3 h-3" />
+                  Testing Mode
+                </span>
+              ) : (
+                <span className="hidden xl:inline-block text-[10px] px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--bg)] text-[var(--ink-muted)] font-mono font-semibold">
+                  Live Arena
+                </span>
+              )}
             </div>
           </div>
 
@@ -41,6 +52,12 @@ export const Header: React.FC<HeaderProps> = ({
               <Zap className="w-3.5 h-3.5 text-[var(--brand)]" />
               <span>Arena</span>
             </a>
+            {onOpenPractice && (
+              <button onClick={onOpenPractice} className="flex items-center gap-1.5 hover:text-[var(--brand)] transition-colors">
+                <BookOpen className="w-3.5 h-3.5 text-[var(--brand)]" />
+                <span className="font-bold text-[var(--brand)]">Practice Bank</span>
+              </button>
+            )}
             <a href="#categories" className="flex items-center gap-1.5 hover:text-[var(--brand)] transition-colors">
               <BookOpen className="w-3.5 h-3.5" />
               <span>Topics</span>
@@ -50,6 +67,7 @@ export const Header: React.FC<HeaderProps> = ({
               <span>Features</span>
             </a>
           </nav>
+
 
           {/* Action Buttons, Profile & Backend Status */}
           <div className="flex items-center gap-2 shrink-0">
@@ -74,6 +92,20 @@ export const Header: React.FC<HeaderProps> = ({
                   <LogOut className="w-4 h-4" />
                 </button>
               </div>
+            ) : testingMode ? (
+              <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-[var(--bg)] border border-[var(--border)] text-xs font-semibold text-[var(--ink-muted)]">
+                  <User className="w-3.5 h-3.5 text-[var(--brand)] shrink-0" />
+                  <span className="hidden sm:inline">Guest Tester</span>
+                </div>
+                <button
+                  onClick={onOpenAuthModal}
+                  className="p-1.5 rounded border border-[var(--border)] hover:bg-[var(--bg)] text-[var(--ink-muted)] hover:text-[var(--ink)] transition-colors text-xs"
+                  title="Optional Sign In"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                </button>
+              </div>
             ) : (
               <button
                 onClick={onOpenAuthModal}
@@ -83,6 +115,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="hidden sm:inline">Sign In</span>
               </button>
             )}
+
 
             <button
               onClick={onOpenJoinModal}

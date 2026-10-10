@@ -2,19 +2,21 @@ import React, { useState } from 'react';
 import { Header } from './components/common/Header';
 import { Footer } from './components/common/Footer';
 import { DashboardLanding } from './pages/DashboardLanding';
+import { PracticeMode } from './components/practice/PracticeMode';
 import { LobbyView } from './components/gameplay/LobbyView';
 import { ArenaQuizRunner } from './components/gameplay/ArenaQuizRunner';
 import { PodiumView } from './components/gameplay/PodiumView';
 import { AuthModal } from './components/auth/AuthModal';
 import { ActiveGameSession, QuizSessionConfig, JoinSessionPayload } from './types';
 import { sampleQuestions } from './data/sampleQuestions';
+import { questionBank } from './data/questionBank';
 import { sessionService } from './services/sessionService';
 
 export const App: React.FC = () => {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isJoinOpen, setIsJoinOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
-  const [viewState, setViewState] = useState<'dashboard' | 'lobby' | 'arena' | 'podium'>('dashboard');
+  const [viewState, setViewState] = useState<'dashboard' | 'practice' | 'lobby' | 'arena' | 'podium'>('dashboard');
 
   const [activeSession, setActiveSession] = useState<ActiveGameSession | null>(null);
 
@@ -22,8 +24,16 @@ export const App: React.FC = () => {
   const handleSessionCreated = async (config: QuizSessionConfig) => {
     const res = await sessionService.createSession(config);
     if (res.success && res.code) {
-      const filteredQuestions = sampleQuestions.filter(q => q.category === config.category);
-      const sessionQuestions = filteredQuestions.length > 0 ? filteredQuestions : sampleQuestions;
+      let sessionQuestions = sampleQuestions;
+
+      if (config.customQuestions && config.customQuestions.length > 0) {
+        sessionQuestions = config.customQuestions;
+      } else {
+        const bankCategoryQs = questionBank.filter(q => q.category === config.category);
+        if (bankCategoryQs.length > 0) {
+          sessionQuestions = bankCategoryQs.slice(0, config.questionCount);
+        }
+      }
 
       const newSession: ActiveGameSession = {
         roomCode: res.code,
@@ -31,7 +41,7 @@ export const App: React.FC = () => {
         category: config.category,
         mode: config.mode,
         timePerQuestion: config.timePerQuestionSec,
-        totalQuestions: Math.min(config.questionCount, sessionQuestions.length),
+        totalQuestions: sessionQuestions.length,
         currentRoundIndex: 0,
         status: 'lobby',
         hostName: config.hostName || 'Host',
@@ -53,13 +63,14 @@ export const App: React.FC = () => {
   const handleSessionJoined = async (payload: JoinSessionPayload) => {
     const res = await sessionService.joinSession(payload);
     if (res.success && res.code) {
+      const joinQuestions = questionBank.slice(0, 10);
       const newSession: ActiveGameSession = {
         roomCode: res.code,
         title: `Placement Arena Session (${res.code})`,
         category: 'Quantitative Aptitude',
         mode: 'Standard',
         timePerQuestion: 30,
-        totalQuestions: sampleQuestions.length,
+        totalQuestions: joinQuestions.length,
         currentRoundIndex: 0,
         status: 'lobby',
         hostName: 'Prof. Ramanujan',
@@ -68,7 +79,7 @@ export const App: React.FC = () => {
           { id: 'p_self', name: payload.participantName, college: payload.collegeName, isHost: false, score: 0, status: 'ready' },
           { id: 'p_1', name: 'Ananya Sharma', college: 'IIT Bombay', isHost: false, score: 0, status: 'ready' },
         ],
-        questions: sampleQuestions,
+        questions: joinQuestions,
       };
 
       setActiveSession(newSession);
@@ -144,6 +155,7 @@ export const App: React.FC = () => {
         onOpenCreateModal={() => setIsCreateOpen(true)}
         onOpenJoinModal={() => setIsJoinOpen(true)}
         onOpenAuthModal={() => setIsAuthOpen(true)}
+        onOpenPractice={() => setViewState('practice')}
       />
 
       <main className="flex-1">
@@ -157,7 +169,12 @@ export const App: React.FC = () => {
             onCloseJoin={() => setIsJoinOpen(false)}
             onSessionCreated={handleSessionCreated}
             onSessionJoined={handleSessionJoined}
+            onOpenPractice={() => setViewState('practice')}
           />
+        )}
+
+        {viewState === 'practice' && (
+          <PracticeMode onReturnDashboard={() => setViewState('dashboard')} />
         )}
 
         {viewState === 'lobby' && activeSession && (
@@ -205,3 +222,4 @@ export const App: React.FC = () => {
 };
 
 export default App;
+

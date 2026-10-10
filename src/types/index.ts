@@ -2,7 +2,8 @@ export type AptitudeCategory =
   | 'Quantitative Aptitude'
   | 'Logical Reasoning'
   | 'Verbal Ability'
-  | 'Data Interpretation';
+  | 'Data Interpretation'
+  | 'General Aptitude';
 
 export interface QuizSessionConfig {
   title: string;
@@ -12,7 +13,9 @@ export interface QuizSessionConfig {
   mode: 'Standard' | 'Pressure Cooker' | 'Team Relay';
   hostName: string;
   collegeName?: string;
+  customQuestions?: ActiveQuestion[];
 }
+
 
 export interface JoinSessionPayload {
   joinCode: string;

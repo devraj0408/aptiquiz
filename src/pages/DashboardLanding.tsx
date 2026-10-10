@@ -6,7 +6,8 @@ import { CreateSessionModal } from '../components/session/CreateSessionModal';
 import { JoinSessionModal } from '../components/session/JoinSessionModal';
 import { AptitudeCategory, QuizSessionConfig, JoinSessionPayload } from '../types';
 import { useAuth } from '../hooks/useAuth';
-import { PlusCircle, LogIn, Trophy, Play, ArrowRight, Sparkles, Compass } from 'lucide-react';
+import { isTestingModeEnabled, getTestingModeNotice } from '../config/testingMode';
+import { PlusCircle, LogIn, Trophy, Play, ArrowRight, Sparkles, Compass, FlaskConical } from 'lucide-react';
 
 interface DashboardLandingProps {
   isCreateOpen: boolean;
@@ -17,6 +18,7 @@ interface DashboardLandingProps {
   onCloseJoin: () => void;
   onSessionCreated: (config: QuizSessionConfig) => void;
   onSessionJoined: (payload: JoinSessionPayload) => void;
+  onOpenPractice?: () => void;
 }
 
 export const DashboardLanding: React.FC<DashboardLandingProps> = ({
@@ -28,16 +30,18 @@ export const DashboardLanding: React.FC<DashboardLandingProps> = ({
   onCloseJoin,
   onSessionCreated,
   onSessionJoined,
+  onOpenPractice,
 }) => {
   const { user, profile } = useAuth();
   const [quickCode, setQuickCode] = useState('');
+  const testingMode = isTestingModeEnabled();
 
   const handleQuickJoin = (e: React.FormEvent) => {
     e.preventDefault();
     if (quickCode.trim()) {
       onSessionJoined({
         joinCode: quickCode.trim(),
-        participantName: profile?.fullName || 'Siddharth Nair',
+        participantName: profile?.fullName || 'Guest Competitor',
         collegeName: 'BITS Pilani',
       });
     }
@@ -50,13 +54,26 @@ export const DashboardLanding: React.FC<DashboardLandingProps> = ({
       questionCount: 5,
       timePerQuestionSec: 30,
       mode: 'Standard',
-      hostName: profile?.fullName || 'Prof. Ramanujan',
+      hostName: profile?.fullName || 'Guest Host',
       collegeName: 'IIT Madras',
     });
   };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 animate-fade-in-up">
+      {/* Testing Mode Banner */}
+      {testingMode && (
+        <div className="p-3.5 bg-[var(--warning-tint)] border border-[var(--accent)]/30 rounded-[6px] text-xs text-[var(--accent)] font-medium flex items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <FlaskConical className="w-4 h-4 shrink-0 text-[var(--accent)]" />
+            <span>{getTestingModeNotice()}</span>
+          </div>
+          <span className="text-[10px] font-mono uppercase bg-[var(--surface)] px-2 py-0.5 rounded border border-[var(--accent)]/30 shrink-0 font-semibold">
+            VITE_TESTING_MODE=true
+          </span>
+        </div>
+      )}
+
       {/* Hero Shell Card */}
       <section id="arena" className="bg-[var(--surface)] border border-[var(--border)] rounded-[8px] p-6 sm:p-10 relative overflow-hidden shadow-xs hover:shadow-sm transition-all duration-200">
         <div className="max-w-3xl space-y-6">
@@ -66,10 +83,15 @@ export const DashboardLanding: React.FC<DashboardLandingProps> = ({
               <span>Real-Time Aptitude Arena</span>
             </div>
 
-            {user && (
+            {user ? (
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-[4px] bg-[var(--bg)] border border-[var(--border)] text-[var(--ink)] text-xs font-semibold">
                 <Sparkles className="w-3.5 h-3.5 text-[var(--brand)]" />
                 <span>Welcome back, <strong>{profile?.fullName || user.email?.split('@')[0]}</strong></span>
+              </div>
+            ) : testingMode && (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-[4px] bg-[var(--bg)] border border-[var(--border)] text-[var(--ink-muted)] text-xs font-semibold">
+                <FlaskConical className="w-3.5 h-3.5 text-[var(--accent)]" />
+                <span>Guest Testing Mode</span>
               </div>
             )}
           </div>
@@ -83,7 +105,7 @@ export const DashboardLanding: React.FC<DashboardLandingProps> = ({
           </p>
 
           {/* Action Entry Points */}
-          <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+          <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <button
               onClick={onOpenCreate}
               className="btn-primary flex items-center justify-center gap-2 text-sm py-3 px-6 group shadow-xs active:scale-[0.99]"
@@ -98,9 +120,20 @@ export const DashboardLanding: React.FC<DashboardLandingProps> = ({
               className="btn-secondary flex items-center justify-center gap-2 text-sm py-3 px-6 active:scale-[0.99]"
             >
               <LogIn className="w-5 h-5 text-[var(--brand)]" />
-              <span>Join Session with Code</span>
+              <span>Join Session</span>
             </button>
+
+            {onOpenPractice && (
+              <button
+                onClick={onOpenPractice}
+                className="btn-secondary flex items-center justify-center gap-2 text-sm py-3 px-6 active:scale-[0.99] border-[var(--brand)]/40 text-[var(--brand)] font-semibold"
+              >
+                <Compass className="w-5 h-5 text-[var(--brand)]" />
+                <span>Practice Bank (250 Qs)</span>
+              </button>
+            )}
           </div>
+
 
           {/* Quick Join Input Box */}
           <form 
