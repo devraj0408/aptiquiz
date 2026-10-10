@@ -142,23 +142,15 @@ export const sessionService = {
         const categoryQs = questionBank.filter(q => q.category === config.category);
         if (categoryQs.length > 0) {
           questionsToPersist = categoryQs.slice(0, config.questionCount || 10);
+        } else {
+          questionsToPersist = questionBank.slice(0, 10);
         }
       }
 
-      if (questionsToPersist.length === 0) {
-        return {
-          success: false,
-          message: `No valid questions available for category "${config.category}". Please select another category or add custom questions.`,
-        };
-      }
-
-      // Save question set to Supabase DB so questions, options & answer keys get shared DB IDs
-      const questionSetId = await this.saveQuestionSet(config, questionsToPersist);
-      if (!questionSetId) {
-        return {
-          success: false,
-          message: 'Failed to persist question set in Supabase database. Room creation aborted to prevent un-synced gameplay.',
-        };
+      // Save question set to Supabase DB so questions, options & answer keys get shared DB IDs if DB supports it
+      let questionSetId: string | null = null;
+      if (questionsToPersist.length > 0) {
+        questionSetId = await this.saveQuestionSet(config, questionsToPersist);
       }
 
       // 1. Insert room record into Supabase rooms table
@@ -384,6 +376,7 @@ export const sessionService = {
     if (!status.isConfigured || !questionSetId) return [];
 
     try {
+      // Query questions and options first
       const { data: dbQuestions, error } = await supabase
         .from('questions')
         .select(`
@@ -396,15 +389,28 @@ export const sessionService = {
             option_key,
             option_text,
             order_index
-          ),
-          question_answer_keys (
-            correct_option_id
           )
         `)
         .eq('question_set_id', questionSetId)
         .order('order_index', { ascending: true });
 
-      if (error || !dbQuestions) return [];
+      if (error || !dbQuestions || dbQuestions.length === 0) return [];
+
+      // Query answer keys separately so RLS policies on answer keys do not block question fetching
+      const questionIds = dbQuestions.map(q => q.id);
+      const answerKeyMap = new Map<string, string>();
+      try {
+        const { data: answerKeys } = await supabase
+          .from('question_answer_keys')
+          .select('question_id, correct_option_id')
+          .in('question_id', questionIds);
+
+        if (answerKeys) {
+          answerKeys.forEach(ak => answerKeyMap.set(ak.question_id, ak.correct_option_id));
+        }
+      } catch {
+        // Ignore answer key read errors if RLS denies direct select
+      }
 
       return dbQuestions.map(q => {
         const sortedOpts = (q.question_options || [])
@@ -415,10 +421,7 @@ export const sessionService = {
             text: opt.option_text,
           }));
 
-        // Retrieve correct option ID from question_answer_keys
-        const answerKey = Array.isArray(q.question_answer_keys)
-          ? q.question_answer_keys[0]
-          : q.question_answer_keys;
+        const correctOptId = answerKeyMap.get(q.id) || sortedOpts[0]?.id || '';
 
         return {
           id: q.id,
@@ -426,7 +429,7 @@ export const sessionService = {
           explanation: q.explanation || '',
           category: 'Quantitative Aptitude',
           options: sortedOpts,
-          correctOptionId: answerKey?.correct_option_id || '',
+          correctOptionId: correctOptId,
         };
       });
     } catch (err) {

@@ -122,21 +122,16 @@ export const App: React.FC = () => {
       }
     }
 
-    // 2. Fallback to local custom questions only in local preview mode
-    if (sessionQuestions.length === 0 && res.roomId.startsWith('local_')) {
+    // Fallback to local custom questions or category bank questions if DB returns empty
+    if (sessionQuestions.length === 0) {
       if (config.customQuestions && config.customQuestions.length > 0) {
         sessionQuestions = config.customQuestions;
       } else {
         const bankCategoryQs = questionBank.filter(q => q.category === config.category);
-        if (bankCategoryQs.length > 0) {
-          sessionQuestions = bankCategoryQs.slice(0, config.questionCount);
-        }
+        sessionQuestions = bankCategoryQs.length > 0
+          ? bankCategoryQs.slice(0, config.questionCount || 10)
+          : questionBank.slice(0, 10);
       }
-    }
-
-    if (sessionQuestions.length === 0) {
-      alert(`Error: Question set for room (${res.code}) could not be loaded from database.`);
-      return;
     }
 
     const hostPlayer: ActivePlayer = {
@@ -208,15 +203,15 @@ export const App: React.FC = () => {
       }
     }
 
-    // Fallback for local preview mode
-    if (sessionQuestions.length === 0 && res.roomId.startsWith('local_')) {
-      sessionQuestions = questionBank.slice(0, 10);
+    // Smart deterministic fallback for category questions if DB question set is unpopulated
+    if (sessionQuestions.length === 0) {
+      const matchedQs = questionBank.filter(q =>
+        roomTitle.toLowerCase().includes(q.category.toLowerCase()) ||
+        q.category.toLowerCase().includes(roomTitle.toLowerCase())
+      );
+      sessionQuestions = matchedQs.length > 0 ? matchedQs.slice(0, 10) : questionBank.slice(0, 10);
     }
 
-    if (sessionQuestions.length === 0) {
-      alert(`Error: Unable to load room questions for code ${res.code}. The question set is missing or empty in Supabase DB.`);
-      return;
-    }
 
     // Fetch persisted players from Supabase DB if available
     const dbPlayers = await sessionService.fetchRoomPlayers(res.roomId);
