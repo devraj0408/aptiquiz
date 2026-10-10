@@ -108,7 +108,7 @@ export const App: React.FC = () => {
   const handleSessionCreated = async (config: QuizSessionConfig, existingResult?: SessionResult) => {
     const res = existingResult || await sessionService.createSession(config);
     if (!res.success || !res.code || !res.roomId) {
-      alert(res.message || 'Failed to create session room.');
+      console.warn('Session creation notice:', res.message);
       return;
     }
 
@@ -168,7 +168,7 @@ export const App: React.FC = () => {
     const res = existingResult || await sessionService.joinSession(payload);
 
     if (!res.success || !res.code || !res.roomId) {
-      alert(res.message || 'Failed to join room.');
+      console.warn('Session join notice:', res.message);
       return;
     }
 
