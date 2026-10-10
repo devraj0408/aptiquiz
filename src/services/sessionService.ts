@@ -1,5 +1,7 @@
 import { QuizSessionConfig, JoinSessionPayload, ActiveQuestion } from '../types';
 import { supabase, getSupabaseConfigStatus } from '../lib/supabase';
+import { questionBank } from '../data/questionBank';
+import { sampleQuestions } from '../data/sampleQuestions';
 
 export interface SessionResult {
   success: boolean;
@@ -133,10 +135,21 @@ export const sessionService = {
     }
 
     try {
-      // Save custom/selected question set to Supabase DB if questions exist
-      let questionSetId: string | null = null;
+      // Determine questions to persist (custom questions or filtered category bank questions)
+      let questionsToPersist: ActiveQuestion[] = [];
       if (config.customQuestions && config.customQuestions.length > 0) {
-        questionSetId = await this.saveQuestionSet(config, config.customQuestions);
+        questionsToPersist = config.customQuestions;
+      } else {
+        const categoryQs = questionBank.filter(q => q.category === config.category);
+        questionsToPersist = categoryQs.length > 0
+          ? categoryQs.slice(0, config.questionCount || 10)
+          : sampleQuestions;
+      }
+
+      // Save question set to Supabase DB so questions, options & answer keys get shared DB IDs
+      let questionSetId: string | null = null;
+      if (questionsToPersist.length > 0) {
+        questionSetId = await this.saveQuestionSet(config, questionsToPersist);
       }
 
       // 1. Insert room record into Supabase rooms table
@@ -364,6 +377,9 @@ export const sessionService = {
             option_key,
             option_text,
             order_index
+          ),
+          question_answer_keys (
+            correct_option_id
           )
         `)
         .eq('question_set_id', questionSetId)
@@ -380,13 +396,18 @@ export const sessionService = {
             text: opt.option_text,
           }));
 
+        // Retrieve correct option ID from question_answer_keys
+        const answerKey = Array.isArray(q.question_answer_keys)
+          ? q.question_answer_keys[0]
+          : q.question_answer_keys;
+
         return {
           id: q.id,
           prompt: q.prompt,
           explanation: q.explanation || '',
           category: 'Quantitative Aptitude',
           options: sortedOpts,
-          correctOptionId: '', // Secret! Answers are evaluated securely on server / submitted option checks
+          correctOptionId: answerKey?.correct_option_id || '',
         };
       });
     } catch (err) {

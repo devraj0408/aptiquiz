@@ -73,13 +73,18 @@ USING (true)
 WITH CHECK (true);
 
 -- ----------------------------------------------------------------------------
--- 6. QUESTION_ANSWER_KEYS POLICIES (INSERT ONLY, NO SELECT FOR CLIENTS!)
+-- 6. QUESTION_ANSWER_KEYS POLICIES
 -- ----------------------------------------------------------------------------
 DROP POLICY IF EXISTS "Allow answer key creation by room hosts" ON public.question_answer_keys;
+DROP POLICY IF EXISTS "Allow answer key reading for game players" ON public.question_answer_keys;
 
 CREATE POLICY "Allow answer key creation by room hosts"
 ON public.question_answer_keys FOR INSERT
 TO anon, authenticated
 WITH CHECK (true);
 
--- INTENTIONALLY NO SELECT POLICY FOR CLIENTS TO KEEP ANSWER KEYS SECRET!
+CREATE POLICY "Allow answer key reading for game players"
+ON public.question_answer_keys FOR SELECT
+TO anon, authenticated
+USING (true);
+

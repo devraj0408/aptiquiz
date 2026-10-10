@@ -8,7 +8,7 @@ interface JoinSessionModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialCode?: string;
-  onJoined?: (payload: JoinSessionPayload) => void;
+  onJoined?: (payload: JoinSessionPayload, result?: SessionResult) => void;
 }
 
 export const JoinSessionModal: React.FC<JoinSessionModalProps> = ({
@@ -57,10 +57,6 @@ export const JoinSessionModal: React.FC<JoinSessionModalProps> = ({
     const res = await sessionService.joinSession(formData);
     setLoading(false);
     setResult(res);
-
-    if (res.success && onJoined) {
-      onJoined(formData);
-    }
   };
 
   return createPortal(
@@ -127,7 +123,7 @@ export const JoinSessionModal: React.FC<JoinSessionModalProps> = ({
               </button>
               <button
                 onClick={() => {
-                  if (onJoined) onJoined(formData);
+                  if (onJoined && result) onJoined(formData, result);
                   else onClose();
                 }}
                 className="btn-primary text-xs py-2 px-4 flex items-center gap-1.5"

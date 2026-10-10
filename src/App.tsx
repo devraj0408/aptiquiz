@@ -98,17 +98,30 @@ export const App: React.FC = () => {
   }, [activeSession?.roomId]);
 
   // Handle session creation from modal or category select
-  const handleSessionCreated = async (config: QuizSessionConfig) => {
-    const res = await sessionService.createSession(config);
+  const handleSessionCreated = async (config: QuizSessionConfig, existingResult?: SessionResult) => {
+    const res = existingResult || await sessionService.createSession(config);
     if (res.success && res.code) {
-      let sessionQuestions = sampleQuestions;
+      let sessionQuestions: ActiveQuestion[] = [];
 
-      if (config.customQuestions && config.customQuestions.length > 0) {
-        sessionQuestions = config.customQuestions;
-      } else {
-        const bankCategoryQs = questionBank.filter(q => q.category === config.category);
-        if (bankCategoryQs.length > 0) {
-          sessionQuestions = bankCategoryQs.slice(0, config.questionCount);
+      // 1. Fetch exact persisted question set from DB if questionSetId is available
+      if (res.questionSetId) {
+        const loadedQuestions = await sessionService.fetchRoomQuestions(res.questionSetId);
+        if (loadedQuestions && loadedQuestions.length > 0) {
+          sessionQuestions = loadedQuestions;
+        }
+      }
+
+      // 2. Fallback to local questions if DB questions are empty or local mode
+      if (sessionQuestions.length === 0) {
+        if (config.customQuestions && config.customQuestions.length > 0) {
+          sessionQuestions = config.customQuestions;
+        } else {
+          const bankCategoryQs = questionBank.filter(q => q.category === config.category);
+          if (bankCategoryQs.length > 0) {
+            sessionQuestions = bankCategoryQs.slice(0, config.questionCount);
+          } else {
+            sessionQuestions = sampleQuestions;
+          }
         }
       }
 
@@ -143,8 +156,9 @@ export const App: React.FC = () => {
   };
 
   // Handle session join from modal or quick code
-  const handleSessionJoined = async (payload: JoinSessionPayload) => {
-    const res = await sessionService.joinSession(payload);
+  const handleSessionJoined = async (payload: JoinSessionPayload, existingResult?: SessionResult) => {
+    const res = existingResult || await sessionService.joinSession(payload);
+
     if (res.success && res.code && res.roomId) {
       let roomTitle = `Placement Arena Session (${res.code})`;
       let roomMode: 'Standard' | 'Pressure Cooker' | 'Team Relay' = 'Standard';

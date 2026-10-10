@@ -8,10 +8,11 @@ import { X, Play, Copy, Check, Clock, Layers, Award, Sparkles, ArrowRight, Plus,
 interface CreateSessionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreated?: (config: QuizSessionConfig) => void;
+  onCreated?: (config: QuizSessionConfig, result?: SessionResult) => void;
 }
 
 export const CreateSessionModal: React.FC<CreateSessionModalProps> = ({ isOpen, onClose, onCreated }) => {
+  const [submittedConfig, setSubmittedConfig] = useState<QuizSessionConfig | null>(null);
   const [formData, setFormData] = useState<QuizSessionConfig>({
     title: 'Speed Aptitude Sprint #1',
     category: 'Quantitative Aptitude',
@@ -148,13 +149,10 @@ export const CreateSessionModal: React.FC<CreateSessionModalProps> = ({ isOpen, 
       customQuestions: preparedCustomQs,
     };
 
+    setSubmittedConfig(finalConfig);
     const res = await sessionService.createSession(finalConfig);
     setLoading(false);
     setResult(res);
-
-    if (res.success && onCreated) {
-      onCreated(finalConfig);
-    }
   };
 
   const copyCode = () => {
@@ -248,8 +246,11 @@ export const CreateSessionModal: React.FC<CreateSessionModalProps> = ({ isOpen, 
               </button>
               <button
                 onClick={() => {
-                  if (onCreated) onCreated(formData);
-                  else onClose();
+                  if (onCreated && submittedConfig && result) {
+                    onCreated(submittedConfig, result);
+                  } else {
+                    onClose();
+                  }
                 }}
                 className="btn-primary text-xs py-2 px-4 flex items-center gap-1.5"
               >
