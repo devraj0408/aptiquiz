@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Header } from './components/common/Header';
 import { Footer } from './components/common/Footer';
 import { DashboardLanding } from './pages/DashboardLanding';
@@ -7,10 +7,11 @@ import { LobbyView } from './components/gameplay/LobbyView';
 import { ArenaQuizRunner } from './components/gameplay/ArenaQuizRunner';
 import { PodiumView } from './components/gameplay/PodiumView';
 import { AuthModal } from './components/auth/AuthModal';
-import { ActiveGameSession, QuizSessionConfig, JoinSessionPayload } from './types';
+import { ActiveGameSession, QuizSessionConfig, JoinSessionPayload, ActivePlayer } from './types';
 import { sampleQuestions } from './data/sampleQuestions';
 import { questionBank } from './data/questionBank';
 import { sessionService } from './services/sessionService';
+import { supabase, getSupabaseConfigStatus } from './lib/supabase';
 
 export const App: React.FC = () => {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -19,6 +20,82 @@ export const App: React.FC = () => {
   const [viewState, setViewState] = useState<'dashboard' | 'practice' | 'lobby' | 'arena' | 'podium'>('dashboard');
 
   const [activeSession, setActiveSession] = useState<ActiveGameSession | null>(null);
+
+  // Realtime & Database Player Sync Effect for Cross-Device Session Joining
+  useEffect(() => {
+    if (!activeSession?.roomId || activeSession.roomId.startsWith('local_')) return;
+    const roomId = activeSession.roomId;
+    const configStatus = getSupabaseConfigStatus();
+    if (!configStatus.isConfigured) return;
+
+    // Helper to refresh player list from Supabase DB
+    const refreshRoomState = async () => {
+      const dbPlayers = await sessionService.fetchRoomPlayers(roomId);
+      if (dbPlayers && dbPlayers.length > 0) {
+        const formattedPlayers: ActivePlayer[] = dbPlayers.map(p => ({
+          id: p.id,
+          name: p.display_name,
+          college: p.college_name || undefined,
+          isHost: Boolean(p.is_host),
+          score: 0,
+          status: p.status === 'ready' || p.status === 'joined' ? 'ready' : p.status,
+        }));
+
+        setActiveSession(prev => {
+          if (!prev || prev.roomId !== roomId) return prev;
+          return {
+            ...prev,
+            players: formattedPlayers,
+          };
+        });
+      }
+    };
+
+    // Initial sync from DB
+    refreshRoomState();
+
+    // Subscribe to Realtime postgres_changes on room_players and rooms tables
+    const channel = supabase
+      .channel(`room_sync_${roomId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'room_players',
+          filter: `room_id=eq.${roomId}`,
+        },
+        () => {
+          refreshRoomState();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'rooms',
+          filter: `id=eq.${roomId}`,
+        },
+        payload => {
+          const updatedRoom = payload.new as { status?: string };
+          if (updatedRoom.status === 'in_game') {
+            setViewState(current => {
+              if (current === 'lobby') {
+                setActiveSession(prev => prev ? { ...prev, status: 'active_round', currentRoundIndex: 0 } : null);
+                return 'arena';
+              }
+              return current;
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeSession?.roomId]);
 
   // Handle session creation from modal or category select
   const handleSessionCreated = async (config: QuizSessionConfig) => {
@@ -35,7 +112,17 @@ export const App: React.FC = () => {
         }
       }
 
+      const hostPlayer: ActivePlayer = {
+        id: res.roomPlayerId || 'p_host',
+        name: config.hostName || 'Host',
+        college: config.collegeName,
+        isHost: true,
+        score: 0,
+        status: 'ready',
+      };
+
       const newSession: ActiveGameSession = {
+        roomId: res.roomId,
         roomCode: res.code,
         title: config.title,
         category: config.category,
@@ -45,11 +132,7 @@ export const App: React.FC = () => {
         currentRoundIndex: 0,
         status: 'lobby',
         hostName: config.hostName || 'Host',
-        players: [
-          { id: 'p_host', name: config.hostName || 'Host', college: config.collegeName, isHost: true, score: 0, status: 'ready' },
-          { id: 'p_1', name: 'Ananya Sharma', college: 'IIT Bombay', isHost: false, score: 0, status: 'ready' },
-          { id: 'p_2', name: 'Rahul Verma', college: 'BITS Pilani', isHost: false, score: 0, status: 'ready' },
-        ],
+        players: [hostPlayer],
         questions: sessionQuestions,
       };
 
@@ -62,9 +145,29 @@ export const App: React.FC = () => {
   // Handle session join from modal or quick code
   const handleSessionJoined = async (payload: JoinSessionPayload) => {
     const res = await sessionService.joinSession(payload);
-    if (res.success && res.code) {
+    if (res.success && res.code && res.roomId) {
       const joinQuestions = questionBank.slice(0, 10);
+
+      // Fetch persisted players from Supabase DB if available
+      const dbPlayers = await sessionService.fetchRoomPlayers(res.roomId);
+      let initialPlayers: ActivePlayer[] = [
+        { id: 'p_host', name: 'Prof. Ramanujan', college: 'IIT Madras', isHost: true, score: 0, status: 'ready' },
+        { id: res.roomPlayerId || 'p_self', name: payload.participantName, college: payload.collegeName, isHost: false, score: 0, status: 'ready' },
+      ];
+
+      if (dbPlayers && dbPlayers.length > 0) {
+        initialPlayers = dbPlayers.map(p => ({
+          id: p.id,
+          name: p.display_name,
+          college: p.college_name || undefined,
+          isHost: Boolean(p.is_host),
+          score: 0,
+          status: p.status === 'ready' || p.status === 'joined' ? 'ready' : p.status,
+        }));
+      }
+
       const newSession: ActiveGameSession = {
+        roomId: res.roomId,
         roomCode: res.code,
         title: `Placement Arena Session (${res.code})`,
         category: 'Quantitative Aptitude',
@@ -73,12 +176,8 @@ export const App: React.FC = () => {
         totalQuestions: joinQuestions.length,
         currentRoundIndex: 0,
         status: 'lobby',
-        hostName: 'Prof. Ramanujan',
-        players: [
-          { id: 'p_host', name: 'Prof. Ramanujan', college: 'IIT Madras', isHost: true, score: 0, status: 'ready' },
-          { id: 'p_self', name: payload.participantName, college: payload.collegeName, isHost: false, score: 0, status: 'ready' },
-          { id: 'p_1', name: 'Ananya Sharma', college: 'IIT Bombay', isHost: false, score: 0, status: 'ready' },
-        ],
+        hostName: 'Host',
+        players: initialPlayers,
         questions: joinQuestions,
       };
 
@@ -88,12 +187,16 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleStartGame = () => {
+  const handleStartGame = async () => {
     if (activeSession) {
+      if (activeSession.roomId) {
+        await sessionService.updateRoomStatus(activeSession.roomId, 'in_game');
+      }
       setActiveSession({ ...activeSession, status: 'active_round', currentRoundIndex: 0 });
       setViewState('arena');
     }
   };
+
 
   const handleAnswerSubmitted = (optionId: string, latencyMs: number) => {
     if (!activeSession) return;

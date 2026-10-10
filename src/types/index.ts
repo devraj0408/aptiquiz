@@ -58,6 +58,7 @@ export interface ActivePlayer {
 }
 
 export interface ActiveGameSession {
+  roomId?: string;
   roomCode: string;
   title: string;
   category: AptitudeCategory;
@@ -70,3 +71,4 @@ export interface ActiveGameSession {
   players: ActivePlayer[];
   questions: ActiveQuestion[];
 }
+
