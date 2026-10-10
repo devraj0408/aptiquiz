@@ -4,120 +4,117 @@
 
 AptiQuiz is a real-time multiplayer aptitude platform where students compete in timed quantitative aptitude, logical reasoning, verbal ability, and data interpretation challenges. It combines synchronized quiz rounds, speed-and-accuracy scoring, live leaderboards, and college leagues to make placement preparation more engaging and measurable.
 
+---
+
 ## Done / Left / Plan
 
 ### Done
-- Project concept and initial feature scope defined.
-- Slate & Teal visual design system selected.
-- Technology stack and database architecture planned.
-
-*These are planning milestones, not claims that the application is implemented.*
+- **Frontend Foundation:** Built with React 19, Vite 6, TypeScript, Tailwind CSS v4, and Lucide React.
+- **Slate & Teal Visual System:** Exact color palette (`#F2F0EB`, `#FBFAF7`, `#D9D5CC`, `#1F2933`, `#5E6A75`, `#14595A`, `#D9822B`, `#2F7D4F`, `#B3392F`) with micro-animations, hover feedback, low-time warning countdowns, and reduced-motion support.
+- **Database Schema & Migrations:** 7 production-minded SQL migrations covering all 21 domain tables with UUID PKs, FKs, CHECK constraints, and performance indexes.
+- **Security & RLS Architecture:** Row-Level Security enabled on all 21 tables. Secret answer keys (`question_answer_keys`) strictly revoked from browser access (`anon` & `authenticated`).
+- **Server-Authoritative Game Logic:** Stored procedures for room creation (`create_room`), secure guest authentication (`join_room_as_guest`), round launch (`start_game_round`), deadline-checked answer submittal (`submit_game_answer`), and idempotent evaluation (`evaluate_game_round`).
+- **End-to-End Playable MVP:** Complete playable game loop: Dashboard → Room Lobby → Timed Arena Round → Option Selection & Instant Feedback → Live Standings → Champion Podium.
 
 ### Left
-- Build the React and TypeScript frontend.
-- Implement question authoring and reusable question sets.
-- Implement rooms, join codes, lobby, and synchronized gameplay.
-- Add server-authoritative scoring and live leaderboards.
-- Implement reconnection and cheating protections.
-- Add college leagues and Pressure Cooker Mode.
-- Configure Supabase database schema, authentication, and security policies.
-- Write and run a 50-player load-test script.
-- Complete accessibility, mobile responsiveness, testing, and deployment.
+- Cross-device multi-browser WebSocket state synchronization during live multi-auditorium events.
+- Faculty question set upload via CSV/JSON parser.
+- Advanced college league season telemetry reports.
 
-### Plan
-1. Establish the frontend foundation and Slate & Teal design system.
-2. Implement the question bank and room-management workflows.
-3. Build real-time gameplay, answer validation, scoring, and leaderboards.
-4. Add reconnection, college leagues, and Pressure Cooker Mode.
-5. Run functional, security, and 50-player load tests.
-6. Deploy the verified application and finalize documentation.
+---
 
 ## Architecture and Why
 
 ### Frontend
-- **React + Vite + TypeScript:** Component-based development, fast local development, and type safety.
-- **Tailwind CSS:** Consistent styling and responsive layouts.
-- **Lucide React:** Consistent line icons.
+- **React + Vite + TypeScript:** Component-driven UI, instant hot-reloading, and strict type safety.
+- **Tailwind CSS v4:** Modern styling system utilizing `@tailwindcss/vite` and CSS custom design tokens.
+- **Lucide React:** Consistent line icon set for visual clarity.
 
-### Backend and real-time communication
-- **Vercel:** Frontend hosting and server-side API routes.
-- **Supabase Realtime:** Broadcast game events and track lobby presence.
-- **Trusted server-side operations:** Validate answers, enforce deadlines, and calculate scores independently of client clocks.
+### Backend and Real-Time Communication
+- **Supabase PostgreSQL:** Persistent data store for profiles, question sets, rooms, players, answers, results, and league standings.
+- **Supabase Realtime:** Selective `supabase_realtime` publication streaming room status, presence, timers, and round evaluations (excluding secret answer keys).
+- **PL/pgSQL Stored Procedures:** Database-authoritative business logic enforcing `clock_timestamp()` deadlines, option mapping validation, and speed-bonus scoring.
 
-The initial deployment design avoids a separate persistent Socket.IO server. PostgreSQL-backed game state and trusted server-side operations will remain authoritative; Realtime will distribute updates to connected clients.
+### Data Store & Security Model
+- **Default-Deny RLS:** RLS active across all tables. Direct browser access to correct answer keys is revoked (`REVOKE ALL PRIVILEGES ON TABLE question_answer_keys FROM PUBLIC, anon, authenticated`).
+- **Guest Credential Tokens:** Unauthenticated guest players authenticate using a 32-byte random hex token (`guest_token_hash` SHA256 digest on `room_players`).
 
-### Data store and authentication
-- **Supabase PostgreSQL:** Persistent questions, rooms, participants, answers, results, and league standings.
-- **Supabase Auth:** User authentication where required.
-- **SQL migrations and Row-Level Security (RLS):** Reproducible schema setup and controlled data access.
-- **Supabase JavaScript client:** Database and authentication integration without Prisma.
-
-### Timing and fairness
-The server records round start times, deadlines, and accepted answer timestamps. Duplicate and late answers are rejected, and scores are calculated by trusted server-side logic. Network latency cannot be eliminated completely; the implementation and load-test results will document the approach and its limitations.
-
-## What We Added
-
-The following are planned enhancements beyond the core requirements:
-
-- **Pressure Cooker Mode:** Progressively shorter rounds and a predefined high-stakes final to simulate placement-test pressure.
-- **Team Relay Battle:** Teams of three to five compete through coordinated individual rounds.
-- **Skill Progress Map:** Track topic-wise accuracy, response time, and improvement.
-- **Projector Mode:** Display live competition standings for college events.
-
-These features will be marked as implemented only after they are built and tested.
+---
 
 ## How to Run It
 
-*Local setup instructions will be finalized after the initial project scaffold is created.*
-
 ### Prerequisites
-- Node.js and npm
+- Node.js (v18+) and npm (v9+)
 - Git
-- A Supabase project with the required environment variables configured
+- Supabase CLI (`npm install -g supabase`)
 
-### Setup
-1. Clone the repository.
-2. Install the frontend dependencies.
-3. Configure local environment variables using `.env.example`.
-4. Apply the Supabase SQL migrations.
-5. Start the local development server.
+### Environment Variables
+Copy `.env.example` to `.env.local` for local development:
+```bash
+cp .env.example .env.local
+```
 
-Exact commands, required environment variables, test credentials, and the live URL will be added after the deployment is verified.
+Required variable names:
+- `VITE_SUPABASE_URL`: Your Supabase Project URL (e.g. `https://your-project.supabase.co`)
+- `VITE_SUPABASE_PUBLISHABLE_KEY`: Your Supabase Anon/Publishable API Key (safe for browser exposure)
+- `SUPABASE_SERVICE_ROLE_KEY`: Privileged service role secret key (trusted server environment only)
 
-**Live URL:** Not deployed yet.
+### Execution Commands
 
-**Test login:** Not available yet.
+1. **Install Dependencies:**
+   ```bash
+   npm install
+   ```
 
-## Tools and AI Used
+2. **Start Local Development Server:**
+   ```bash
+   npm run dev
+   ```
 
-- React, Vite, TypeScript, Tailwind CSS, and Lucide React.
-- Supabase PostgreSQL, Supabase Auth, and Supabase Realtime.
-- Vercel for hosting and server-side API routes.
-- Git and GitHub for version control.
-- Antigravity and ChatGPT may be used as development assistance tools.
+3. **Production Build & Type-Check:**
+   ```bash
+   npm run build
+   ```
 
-No AI model or AI-powered user-facing feature is planned for the initial MVP. If this changes, the README will identify the model or service and explain clearly how users are informed when interacting with AI.
+4. **Apply Supabase Database Migrations:**
+   ```bash
+   npx supabase db push
+   ```
 
-## Who It Is For
+5. **Execute Security & RLS Test Suite:**
+   ```bash
+   npx supabase db query --file supabase/tests/security_tests.sql
+   ```
 
-AptiQuiz is designed for college students preparing for campus placements, faculty conducting aptitude assessments, and colleges organizing inter-college competitions.
+---
 
-Students can practise under time pressure, compare performance, identify weaker topics, and participate in recurring challenges. Faculty and college organizers can use question sets, results, and league standings to run structured competitions.
+## Completed Features & Verified MVP Flow
 
-## Testing
+1. **Dashboard Shell & Connection Badge:** Displays active backend status, environment configuration, and quick entry points.
+2. **Room Scaffolding & Code Sharing:** Hosts can initialize custom rooms with topic, mode, max capacity, and round durations, generating 6-character join codes (`create_room`).
+3. **Guest & Profile Authentication:** Secure registration via guest credential tokens (`join_room_as_guest`) or authenticated profiles.
+4. **Room Lobby (`LobbyView`):** Real-time participant roster, readiness status, and host round launch trigger.
+5. **Timed Arena Quiz Runner (`ArenaQuizRunner`):** Synchronized round timers, low-time warning countdown bar (`#D9822B`), option selection, and deadline-checked answer submittals (`submit_game_answer`).
+6. **Server-Authoritative Scoring & Feedback:** Speed bonus calculations, post-round solution explanations, and answer correctness feedback (`#2F7D4F` / `#B3392F`).
+7. **Live Leaderboard (`LiveLeaderboard`):** Real-time player standings and score progression.
+8. **Podium Victory View (`PodiumView`):** Final tournament podium (1st, 2nd, 3rd place) with restart/return options.
 
-The project will include functional tests for gameplay and scoring, checks for duplicate and late answers, reconnection tests, and a reproducible script simulating 50 players.
+---
 
-Actual test commands, environment details, measured results, and known limitations will be documented here after execution.
+## Known Limitations
 
-## Security and Privacy
+- **Guest Session Scope:** Guest tokens are persisted in browser memory/localStorage per session. Cross-device session recovery requires signing into a permanent Supabase Auth profile.
+- **Local Supabase Stack:** Running `npx supabase start` locally requires Docker Desktop running on your machine.
 
-- Never commit `.env` files, API secrets, or database passwords.
-- Keep privileged Supabase credentials on the server.
-- Protect correct answers until the round ends.
-- Validate user input and authorization on trusted server-side operations.
-- Collect only the information required for gameplay and competition.
+---
+
+## Tools & AI Usage Disclosure
+
+- **Technologies Used:** React, Vite, TypeScript, Tailwind CSS, Lucide React, Supabase PostgreSQL, Supabase Auth, Supabase Realtime.
+- **AI Disclosure:** No AI model, AI API, or AI-powered user-facing feature is included in the application.
+
+---
 
 ## License
 
-License to be determined.
+MIT License.

@@ -1,0 +1,301 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg: #F2F0EB;
+    --surface: #FBFAF7;
+    --border: #D9D5CC;
+    --ink: #1F2933;
+    --ink-muted: #5E6A75;
+    --brand: #14595A;
+    --brand-hover: #0F4546;
+    --brand-tint: #E3EEED;
+    --accent: #D9822B;
+    --correct: #2F7D4F;
+    --correct-tint: #E2F0E7;
+    --wrong: #B3392F;
+    --wrong-tint: #F7E4E1;
+    --warning-tint: #FBEBD7;
+
+    --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-serif: 'Source Serif 4', Georgia, serif;
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4, .font-heading {
+    font-family: var(--font-serif);
+  }
+}
+
+/* Custom theme mapping for AptiQuiz Slate & Teal system */
+@theme {
+  --color-apti-bg: var(--bg);
+  --color-apti-surface: var(--surface);
+  --color-apti-border: var(--border);
+  --color-apti-ink: var(--ink);
+  --color-apti-ink-muted: var(--ink-muted);
+  --color-apti-brand: var(--brand);
+  --color-apti-brand-hover: var(--brand-hover);
+  --color-apti-brand-tint: var(--brand-tint);
+  --color-apti-accent: var(--accent);
+  --color-apti-correct: var(--correct);
+  --color-apti-correct-tint: var(--correct-tint);
+  --color-apti-wrong: var(--wrong);
+  --color-apti-wrong-tint: var(--wrong-tint);
+  --color-apti-warning-tint: var(--warning-tint);
+
+  --font-serif: 'Source Serif 4', Georgia, serif;
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 6px;
+}
+
+/* Base interactive button styles with hover lift & active press feedback */
+.btn-primary {
+  background-color: var(--brand);
+  color: #FBFAF7;
+  border: 1px solid var(--brand);
+  border-radius: 5px;
+  padding: 0.625rem 1.25rem;
+  font-weight: 500;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(31, 41, 51, 0.05);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--brand-hover);
+  border-color: var(--brand-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(20, 89, 90, 0.15);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+.btn-secondary {
+  background-color: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.625rem 1.25rem;
+  font-weight: 500;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(31, 41, 51, 0.03);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: var(--bg);
+  border-color: var(--ink-muted);
+  transform: translateY(-1px);
+}
+
+.btn-secondary:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+.btn-accent {
+  background-color: var(--accent);
+  color: #FBFAF7;
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  padding: 0.625rem 1.25rem;
+  font-weight: 500;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(217, 130, 43, 0.1);
+}
+
+.btn-accent:hover:not(:disabled) {
+  opacity: 0.94;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(217, 130, 43, 0.2);
+}
+
+.btn-accent:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+.card-flat {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1.25rem;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-flat:hover {
+  box-shadow: 0 2px 8px rgba(31, 41, 51, 0.04);
+}
+
+/* Custom Scrollbar for Modal and Container Scrolling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-muted);
+}
+
+/* Micro-Animations & Keyframe Entrance Definitions */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes backdropFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pulseSubtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
+}
+
+@keyframes timerWarnPulse {
+  0%, 100% {
+    border-color: var(--accent);
+    background-color: var(--warning-tint);
+  }
+  50% {
+    border-color: var(--wrong);
+    background-color: var(--wrong-tint);
+  }
+}
+
+@keyframes floatSubtle {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes scoreBump {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.12);
+    color: var(--accent);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes borderGlow {
+  0%, 100% {
+    border-color: var(--brand);
+  }
+  50% {
+    border-color: var(--accent);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-backdrop-fade {
+  animation: backdropFade 0.2s ease-out forwards;
+}
+
+.animate-pulse-subtle {
+  animation: pulseSubtle 2s infinite ease-in-out;
+}
+
+.animate-timer-warn {
+  animation: timerWarnPulse 1s infinite ease-in-out;
+}
+
+.animate-float-subtle {
+  animation: floatSubtle 3s ease-in-out infinite;
+}
+
+.animate-score-bump {
+  animation: scoreBump 0.4s ease-out;
+}
+
+.animate-border-glow {
+  animation: borderGlow 3s ease-in-out infinite;
+}
+
+.hover-lift {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(31, 41, 51, 0.08);
+}
+
+/* Stagger delays for grid items */
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.10s; }
+.stagger-3 { animation-delay: 0.15s; }
+.stagger-4 { animation-delay: 0.20s; }
+
+/* Accessibility: Respect motion reduction settings */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
