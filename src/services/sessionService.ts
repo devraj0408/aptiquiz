@@ -140,8 +140,16 @@ export const sessionService = {
         .maybeSingle();
 
       if (findError) {
+        console.warn('Room code lookup error:', findError.message);
+        if (findError.message.includes('infinite recursion')) {
+          return {
+            success: false,
+            message: 'Database policy update required: Please run migration 000009 in Supabase SQL Editor to fix RLS infinite recursion.',
+          };
+        }
         return { success: false, message: `Database error looking up room code: ${findError.message}` };
       }
+
 
       if (!room) {
         return {
