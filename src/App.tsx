@@ -7,10 +7,9 @@ import { LobbyView } from './components/gameplay/LobbyView';
 import { ArenaQuizRunner } from './components/gameplay/ArenaQuizRunner';
 import { PodiumView } from './components/gameplay/PodiumView';
 import { AuthModal } from './components/auth/AuthModal';
-import { ActiveGameSession, QuizSessionConfig, JoinSessionPayload, ActivePlayer } from './types';
-import { sampleQuestions } from './data/sampleQuestions';
+import { ActiveGameSession, QuizSessionConfig, JoinSessionPayload, ActivePlayer, ActiveQuestion } from './types';
 import { questionBank } from './data/questionBank';
-import { sessionService } from './services/sessionService';
+import { sessionService, SessionResult } from './services/sessionService';
 import { supabase, getSupabaseConfigStatus } from './lib/supabase';
 
 export const App: React.FC = () => {
@@ -78,16 +77,24 @@ export const App: React.FC = () => {
           filter: `id=eq.${roomId}`,
         },
         payload => {
-          const updatedRoom = payload.new as { status?: string };
-          if (updatedRoom.status === 'in_game') {
-            setViewState(current => {
-              if (current === 'lobby') {
-                setActiveSession(prev => prev ? { ...prev, status: 'active_round', currentRoundIndex: 0 } : null);
-                return 'arena';
-              }
-              return current;
-            });
-          }
+          const updatedRoom = payload.new as { status?: string; current_round_index?: number };
+          
+          setActiveSession(prev => {
+            if (!prev || prev.roomId !== roomId) return prev;
+            const newRoundIndex = typeof updatedRoom.current_round_index === 'number'
+              ? updatedRoom.current_round_index
+              : prev.currentRoundIndex;
+
+            return {
+              ...prev,
+              status: updatedRoom.status === 'in_game' ? 'active_round' : (updatedRoom.status as any || prev.status),
+              currentRoundIndex: newRoundIndex,
+            };
+          });
+
+          if (updatedRoom.status === 'in_game') setViewState('arena');
+          if (updatedRoom.status === 'completed') setViewState('podium');
+          if (updatedRoom.status === 'lobby') setViewState('lobby');
         }
       )
       .subscribe();
@@ -100,147 +107,175 @@ export const App: React.FC = () => {
   // Handle session creation from modal or category select
   const handleSessionCreated = async (config: QuizSessionConfig, existingResult?: SessionResult) => {
     const res = existingResult || await sessionService.createSession(config);
-    if (res.success && res.code) {
-      let sessionQuestions: ActiveQuestion[] = [];
-
-      // 1. Fetch exact persisted question set from DB if questionSetId is available
-      if (res.questionSetId) {
-        const loadedQuestions = await sessionService.fetchRoomQuestions(res.questionSetId);
-        if (loadedQuestions && loadedQuestions.length > 0) {
-          sessionQuestions = loadedQuestions;
-        }
-      }
-
-      // 2. Fallback to local questions if DB questions are empty or local mode
-      if (sessionQuestions.length === 0) {
-        if (config.customQuestions && config.customQuestions.length > 0) {
-          sessionQuestions = config.customQuestions;
-        } else {
-          const bankCategoryQs = questionBank.filter(q => q.category === config.category);
-          if (bankCategoryQs.length > 0) {
-            sessionQuestions = bankCategoryQs.slice(0, config.questionCount);
-          } else {
-            sessionQuestions = sampleQuestions;
-          }
-        }
-      }
-
-      const hostPlayer: ActivePlayer = {
-        id: res.roomPlayerId || 'p_host',
-        name: config.hostName || 'Host',
-        college: config.collegeName,
-        isHost: true,
-        score: 0,
-        status: 'ready',
-      };
-
-      const newSession: ActiveGameSession = {
-        roomId: res.roomId,
-        roomCode: res.code,
-        title: config.title,
-        category: config.category,
-        mode: config.mode,
-        timePerQuestion: config.timePerQuestionSec,
-        totalQuestions: sessionQuestions.length,
-        currentRoundIndex: 0,
-        status: 'lobby',
-        hostName: config.hostName || 'Host',
-        players: [hostPlayer],
-        questions: sessionQuestions,
-      };
-
-      setActiveSession(newSession);
-      setIsCreateOpen(false);
-      setViewState('lobby');
+    if (!res.success || !res.code || !res.roomId) {
+      alert(res.message || 'Failed to create session room.');
+      return;
     }
+
+    let sessionQuestions: ActiveQuestion[] = [];
+
+    // 1. Fetch exact persisted question set from DB if questionSetId is available
+    if (res.questionSetId) {
+      const loadedQuestions = await sessionService.fetchRoomQuestions(res.questionSetId);
+      if (loadedQuestions && loadedQuestions.length > 0) {
+        sessionQuestions = loadedQuestions;
+      }
+    }
+
+    // 2. Fallback to local custom questions only in local preview mode
+    if (sessionQuestions.length === 0 && res.roomId.startsWith('local_')) {
+      if (config.customQuestions && config.customQuestions.length > 0) {
+        sessionQuestions = config.customQuestions;
+      } else {
+        const bankCategoryQs = questionBank.filter(q => q.category === config.category);
+        if (bankCategoryQs.length > 0) {
+          sessionQuestions = bankCategoryQs.slice(0, config.questionCount);
+        }
+      }
+    }
+
+    if (sessionQuestions.length === 0) {
+      alert(`Error: Question set for room (${res.code}) could not be loaded from database.`);
+      return;
+    }
+
+    const hostPlayer: ActivePlayer = {
+      id: res.roomPlayerId || 'p_host',
+      name: config.hostName || 'Host',
+      college: config.collegeName,
+      isHost: true,
+      score: 0,
+      status: 'ready',
+    };
+
+    const newSession: ActiveGameSession = {
+      roomId: res.roomId,
+      roomCode: res.code,
+      title: config.title,
+      category: config.category,
+      mode: config.mode,
+      timePerQuestion: config.timePerQuestionSec,
+      totalQuestions: sessionQuestions.length,
+      currentRoundIndex: 0,
+      status: 'lobby',
+      hostName: config.hostName || 'Host',
+      players: [hostPlayer],
+      questions: sessionQuestions,
+    };
+
+    setActiveSession(newSession);
+    setIsCreateOpen(false);
+    setViewState('lobby');
   };
 
   // Handle session join from modal or quick code
   const handleSessionJoined = async (payload: JoinSessionPayload, existingResult?: SessionResult) => {
     const res = existingResult || await sessionService.joinSession(payload);
 
-    if (res.success && res.code && res.roomId) {
-      let roomTitle = `Placement Arena Session (${res.code})`;
-      let roomMode: 'Standard' | 'Pressure Cooker' | 'Team Relay' = 'Standard';
-      let timeSec = 30;
-      let sessionQuestions = questionBank.slice(0, 10);
+    if (!res.success || !res.code || !res.roomId) {
+      alert(res.message || 'Failed to join room.');
+      return;
+    }
 
-      // Fetch room metadata & persisted question_set_id from Supabase DB
-      if (!res.roomId.startsWith('local_')) {
-        const { data: dbRoom } = await supabase
-          .from('rooms')
-          .select('title, game_mode, time_per_question_sec, question_set_id')
-          .eq('id', res.roomId)
-          .maybeSingle();
+    let roomTitle = `Placement Arena Session (${res.code})`;
+    let roomMode: 'Standard' | 'Pressure Cooker' | 'Team Relay' = 'Standard';
+    let timeSec = 30;
+    let roomStatus = 'lobby';
+    let initialRoundIdx = 0;
+    let sessionQuestions: ActiveQuestion[] = [];
 
-        if (dbRoom) {
-          if (dbRoom.title) roomTitle = dbRoom.title;
-          if (dbRoom.game_mode) roomMode = dbRoom.game_mode as 'Standard' | 'Pressure Cooker' | 'Team Relay';
-          if (dbRoom.time_per_question_sec) timeSec = dbRoom.time_per_question_sec;
+    // Fetch room metadata & persisted question_set_id from Supabase DB
+    if (!res.roomId.startsWith('local_')) {
+      const { data: dbRoom } = await supabase
+        .from('rooms')
+        .select('title, game_mode, time_per_question_sec, question_set_id, status, current_round_index')
+        .eq('id', res.roomId)
+        .maybeSingle();
 
-          if (dbRoom.question_set_id) {
-            const loadedQuestions = await sessionService.fetchRoomQuestions(dbRoom.question_set_id);
-            if (loadedQuestions && loadedQuestions.length > 0) {
-              sessionQuestions = loadedQuestions;
-            }
+      if (dbRoom) {
+        if (dbRoom.title) roomTitle = dbRoom.title;
+        if (dbRoom.game_mode) roomMode = dbRoom.game_mode as 'Standard' | 'Pressure Cooker' | 'Team Relay';
+        if (dbRoom.time_per_question_sec) timeSec = dbRoom.time_per_question_sec;
+        if (dbRoom.status) roomStatus = dbRoom.status;
+        if (typeof dbRoom.current_round_index === 'number') initialRoundIdx = dbRoom.current_round_index;
+
+        if (dbRoom.question_set_id) {
+          const loadedQuestions = await sessionService.fetchRoomQuestions(dbRoom.question_set_id);
+          if (loadedQuestions && loadedQuestions.length > 0) {
+            sessionQuestions = loadedQuestions;
           }
         }
       }
-
-      // Fetch persisted players from Supabase DB if available
-      const dbPlayers = await sessionService.fetchRoomPlayers(res.roomId);
-      let initialPlayers: ActivePlayer[] = [
-        { id: 'p_host', name: 'Host', isHost: true, score: 0, status: 'ready' },
-        { id: res.roomPlayerId || 'p_self', name: payload.participantName, college: payload.collegeName, isHost: false, score: 0, status: 'ready' },
-      ];
-
-      if (dbPlayers && dbPlayers.length > 0) {
-        initialPlayers = dbPlayers.map(p => ({
-          id: p.id,
-          name: p.display_name,
-          college: p.college_name || undefined,
-          isHost: Boolean(p.is_host),
-          score: 0,
-          status: p.status === 'ready' || p.status === 'joined' ? 'ready' : p.status,
-        }));
-      }
-
-      const newSession: ActiveGameSession = {
-        roomId: res.roomId,
-        roomCode: res.code,
-        title: roomTitle,
-        category: sessionQuestions[0]?.category || 'Quantitative Aptitude',
-        mode: roomMode,
-        timePerQuestion: timeSec,
-        totalQuestions: sessionQuestions.length,
-        currentRoundIndex: 0,
-        status: 'lobby',
-        hostName: initialPlayers.find(p => p.isHost)?.name || 'Host',
-        players: initialPlayers,
-        questions: sessionQuestions,
-      };
-
-      setActiveSession(newSession);
-      setIsJoinOpen(false);
-      setViewState('lobby');
     }
-  };
 
+    // Fallback for local preview mode
+    if (sessionQuestions.length === 0 && res.roomId.startsWith('local_')) {
+      sessionQuestions = questionBank.slice(0, 10);
+    }
+
+    if (sessionQuestions.length === 0) {
+      alert(`Error: Unable to load room questions for code ${res.code}. The question set is missing or empty in Supabase DB.`);
+      return;
+    }
+
+    // Fetch persisted players from Supabase DB if available
+    const dbPlayers = await sessionService.fetchRoomPlayers(res.roomId);
+    let initialPlayers: ActivePlayer[] = [
+      { id: 'p_host', name: 'Host', isHost: true, score: 0, status: 'ready' },
+      { id: res.roomPlayerId || 'p_self', name: payload.participantName, college: payload.collegeName, isHost: false, score: 0, status: 'ready' },
+    ];
+
+    if (dbPlayers && dbPlayers.length > 0) {
+      initialPlayers = dbPlayers.map(p => ({
+        id: p.id,
+        name: p.display_name,
+        college: p.college_name || undefined,
+        isHost: Boolean(p.is_host),
+        score: 0,
+        status: p.status === 'ready' || p.status === 'joined' ? 'ready' : p.status,
+      }));
+    }
+
+    const initialSessionStatus = roomStatus === 'in_game' ? 'active_round' : 'lobby';
+
+    const newSession: ActiveGameSession = {
+      roomId: res.roomId,
+      roomCode: res.code,
+      title: roomTitle,
+      category: sessionQuestions[0]?.category || 'Quantitative Aptitude',
+      mode: roomMode,
+      timePerQuestion: timeSec,
+      totalQuestions: sessionQuestions.length,
+      currentRoundIndex: initialRoundIdx,
+      status: initialSessionStatus as any,
+      hostName: initialPlayers.find(p => p.isHost)?.name || 'Host',
+      players: initialPlayers,
+      questions: sessionQuestions,
+    };
+
+    setActiveSession(newSession);
+    setIsJoinOpen(false);
+    setViewState(roomStatus === 'in_game' ? 'arena' : 'lobby');
+  };
 
   const handleStartGame = async () => {
     if (activeSession) {
-      if (activeSession.roomId) {
-        await sessionService.updateRoomStatus(activeSession.roomId, 'in_game');
+      if (activeSession.roomId && !activeSession.roomId.startsWith('local_')) {
+        await sessionService.updateRoomState(activeSession.roomId, {
+          status: 'in_game',
+          current_round_index: 0,
+        });
       }
       setActiveSession({ ...activeSession, status: 'active_round', currentRoundIndex: 0 });
       setViewState('arena');
     }
   };
 
-
   const handleAnswerSubmitted = (optionId: string, latencyMs: number) => {
     if (!activeSession) return;
     const currentQ = activeSession.questions[activeSession.currentRoundIndex];
+    if (!currentQ) return;
+
     const isCorrect = optionId === currentQ.correctOptionId;
 
     const maxTime = activeSession.timePerQuestion * 1000;
@@ -271,14 +306,21 @@ export const App: React.FC = () => {
     });
   };
 
-  const handleNextRound = () => {
+  const handleNextRound = async () => {
     if (activeSession && activeSession.currentRoundIndex + 1 < activeSession.totalQuestions) {
+      const nextRoundIdx = activeSession.currentRoundIndex + 1;
+      if (activeSession.roomId && !activeSession.roomId.startsWith('local_')) {
+        await sessionService.updateRoomState(activeSession.roomId, {
+          current_round_index: nextRoundIdx,
+        });
+      }
       setActiveSession({
         ...activeSession,
-        currentRoundIndex: activeSession.currentRoundIndex + 1,
+        currentRoundIndex: nextRoundIdx,
       });
     }
   };
+
 
   const handleCompleteSession = () => {
     if (activeSession) {

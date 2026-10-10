@@ -1,7 +1,6 @@
 import { QuizSessionConfig, JoinSessionPayload, ActiveQuestion } from '../types';
 import { supabase, getSupabaseConfigStatus } from '../lib/supabase';
 import { questionBank } from '../data/questionBank';
-import { sampleQuestions } from '../data/sampleQuestions';
 
 export interface SessionResult {
   success: boolean;
@@ -141,15 +140,25 @@ export const sessionService = {
         questionsToPersist = config.customQuestions;
       } else {
         const categoryQs = questionBank.filter(q => q.category === config.category);
-        questionsToPersist = categoryQs.length > 0
-          ? categoryQs.slice(0, config.questionCount || 10)
-          : sampleQuestions;
+        if (categoryQs.length > 0) {
+          questionsToPersist = categoryQs.slice(0, config.questionCount || 10);
+        }
+      }
+
+      if (questionsToPersist.length === 0) {
+        return {
+          success: false,
+          message: `No valid questions available for category "${config.category}". Please select another category or add custom questions.`,
+        };
       }
 
       // Save question set to Supabase DB so questions, options & answer keys get shared DB IDs
-      let questionSetId: string | null = null;
-      if (questionsToPersist.length > 0) {
-        questionSetId = await this.saveQuestionSet(config, questionsToPersist);
+      const questionSetId = await this.saveQuestionSet(config, questionsToPersist);
+      if (!questionSetId) {
+        return {
+          success: false,
+          message: 'Failed to persist question set in Supabase database. Room creation aborted to prevent un-synced gameplay.',
+        };
       }
 
       // 1. Insert room record into Supabase rooms table
@@ -348,12 +357,22 @@ export const sessionService = {
    * Updates room status (e.g. from 'lobby' to 'in_game' or 'completed').
    */
   async updateRoomStatus(roomId: string, newStatus: 'lobby' | 'in_game' | 'completed') {
+    return this.updateRoomState(roomId, { status: newStatus });
+  },
+
+  /**
+   * Updates room status and current round index in Supabase DB for cross-device synchronization.
+   */
+  async updateRoomState(roomId: string, updates: { status?: 'lobby' | 'in_game' | 'completed'; current_round_index?: number }) {
     const status = getSupabaseConfigStatus();
     if (!status.isConfigured || roomId.startsWith('local_')) return;
 
     await supabase
       .from('rooms')
-      .update({ status: newStatus })
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', roomId);
   },
 
