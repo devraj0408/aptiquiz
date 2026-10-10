@@ -22,8 +22,17 @@ export const ArenaQuizRunner: React.FC<ArenaQuizRunnerProps> = ({
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [timeLeft, setTimeLeft] = useState(session.timePerQuestion);
-  const [startTime] = useState(Date.now());
+  const [startTime, setStartTime] = useState(Date.now());
   const [feedback, setFeedback] = useState<{ isCorrect: boolean; scoreAwarded: number } | null>(null);
+
+  // Reset answer state & timer when advancing to next round
+  useEffect(() => {
+    setSelectedOptionId(null);
+    setIsSubmitted(false);
+    setTimeLeft(session.timePerQuestion);
+    setFeedback(null);
+    setStartTime(Date.now());
+  }, [currentRoundIndex, session.timePerQuestion]);
 
   // Timer Countdown Effect
   useEffect(() => {
@@ -50,6 +59,7 @@ export const ArenaQuizRunner: React.FC<ArenaQuizRunnerProps> = ({
     setIsSubmitted(true);
     setFeedback({ isCorrect: false, scoreAwarded: 0 });
   };
+
 
   const handleSelectOption = (option: ActiveQuestionOption) => {
     if (isSubmitted) return;

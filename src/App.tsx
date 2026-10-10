@@ -146,12 +146,37 @@ export const App: React.FC = () => {
   const handleSessionJoined = async (payload: JoinSessionPayload) => {
     const res = await sessionService.joinSession(payload);
     if (res.success && res.code && res.roomId) {
-      const joinQuestions = questionBank.slice(0, 10);
+      let roomTitle = `Placement Arena Session (${res.code})`;
+      let roomMode: 'Standard' | 'Pressure Cooker' | 'Team Relay' = 'Standard';
+      let timeSec = 30;
+      let sessionQuestions = questionBank.slice(0, 10);
+
+      // Fetch room metadata & persisted question_set_id from Supabase DB
+      if (!res.roomId.startsWith('local_')) {
+        const { data: dbRoom } = await supabase
+          .from('rooms')
+          .select('title, game_mode, time_per_question_sec, question_set_id')
+          .eq('id', res.roomId)
+          .maybeSingle();
+
+        if (dbRoom) {
+          if (dbRoom.title) roomTitle = dbRoom.title;
+          if (dbRoom.game_mode) roomMode = dbRoom.game_mode as 'Standard' | 'Pressure Cooker' | 'Team Relay';
+          if (dbRoom.time_per_question_sec) timeSec = dbRoom.time_per_question_sec;
+
+          if (dbRoom.question_set_id) {
+            const loadedQuestions = await sessionService.fetchRoomQuestions(dbRoom.question_set_id);
+            if (loadedQuestions && loadedQuestions.length > 0) {
+              sessionQuestions = loadedQuestions;
+            }
+          }
+        }
+      }
 
       // Fetch persisted players from Supabase DB if available
       const dbPlayers = await sessionService.fetchRoomPlayers(res.roomId);
       let initialPlayers: ActivePlayer[] = [
-        { id: 'p_host', name: 'Prof. Ramanujan', college: 'IIT Madras', isHost: true, score: 0, status: 'ready' },
+        { id: 'p_host', name: 'Host', isHost: true, score: 0, status: 'ready' },
         { id: res.roomPlayerId || 'p_self', name: payload.participantName, college: payload.collegeName, isHost: false, score: 0, status: 'ready' },
       ];
 
@@ -169,16 +194,16 @@ export const App: React.FC = () => {
       const newSession: ActiveGameSession = {
         roomId: res.roomId,
         roomCode: res.code,
-        title: `Placement Arena Session (${res.code})`,
-        category: 'Quantitative Aptitude',
-        mode: 'Standard',
-        timePerQuestion: 30,
-        totalQuestions: joinQuestions.length,
+        title: roomTitle,
+        category: sessionQuestions[0]?.category || 'Quantitative Aptitude',
+        mode: roomMode,
+        timePerQuestion: timeSec,
+        totalQuestions: sessionQuestions.length,
         currentRoundIndex: 0,
         status: 'lobby',
-        hostName: 'Host',
+        hostName: initialPlayers.find(p => p.isHost)?.name || 'Host',
         players: initialPlayers,
-        questions: joinQuestions,
+        questions: sessionQuestions,
       };
 
       setActiveSession(newSession);
@@ -186,6 +211,7 @@ export const App: React.FC = () => {
       setViewState('lobby');
     }
   };
+
 
   const handleStartGame = async () => {
     if (activeSession) {

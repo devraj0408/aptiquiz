@@ -1,4 +1,4 @@
-import { QuizSessionConfig, JoinSessionPayload } from '../types';
+import { QuizSessionConfig, JoinSessionPayload, ActiveQuestion } from '../types';
 import { supabase, getSupabaseConfigStatus } from '../lib/supabase';
 
 export interface SessionResult {
@@ -6,6 +6,7 @@ export interface SessionResult {
   code?: string;
   roomId?: string;
   roomPlayerId?: string;
+  questionSetId?: string;
   message: string;
   details?: Record<string, unknown>;
 }
@@ -21,6 +22,88 @@ export const sessionService = {
       code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     return code;
+  },
+
+  /**
+   * Persists a question set with its questions, options, and secret answer keys to Supabase DB.
+   */
+  async saveQuestionSet(config: QuizSessionConfig, questionsToSave: ActiveQuestion[]): Promise<string | null> {
+    const status = getSupabaseConfigStatus();
+    if (!status.isConfigured || questionsToSave.length === 0) return null;
+
+    try {
+      // 1. Insert question_set
+      const categoryName = config.category === 'General Aptitude' ? 'Quantitative Aptitude' : config.category;
+      const { data: qSet, error: qSetError } = await supabase
+        .from('question_sets')
+        .insert({
+          title: `${config.title.trim()} Question Set`,
+          category: categoryName,
+          is_public: true,
+        })
+        .select()
+        .single();
+
+      if (qSetError || !qSet) {
+        console.warn('Could not persist question_set:', qSetError?.message);
+        return null;
+      }
+
+      // 2. Insert questions, options, and answer keys
+      for (let idx = 0; idx < questionsToSave.length; idx++) {
+        const q = questionsToSave[idx];
+
+        const { data: dbQ, error: qError } = await supabase
+          .from('questions')
+          .insert({
+            question_set_id: qSet.id,
+            prompt: q.prompt.trim(),
+            explanation: q.explanation ? q.explanation.trim() : null,
+            order_index: idx,
+            difficulty: 'medium',
+          })
+          .select()
+          .single();
+
+        if (qError || !dbQ) continue;
+
+        let selectedCorrectOptId: string | null = null;
+
+        for (let optIdx = 0; optIdx < q.options.length; optIdx++) {
+          const opt = q.options[optIdx];
+          const { data: dbOpt } = await supabase
+            .from('question_options')
+            .insert({
+              question_id: dbQ.id,
+              option_key: opt.key,
+              option_text: opt.text.trim(),
+              order_index: optIdx,
+            })
+            .select()
+            .single();
+
+          if (dbOpt && (q.correctOptionId === opt.id || q.correctOptionId === opt.key)) {
+            selectedCorrectOptId = dbOpt.id;
+          }
+        }
+
+        // Save secret answer key into protected question_answer_keys table
+        if (selectedCorrectOptId) {
+          await supabase
+            .from('question_answer_keys')
+            .insert({
+              question_id: dbQ.id,
+              correct_option_id: selectedCorrectOptId,
+              points: 10,
+            });
+        }
+      }
+
+      return qSet.id;
+    } catch (err) {
+      console.warn('Error saving question set to DB:', err);
+      return null;
+    }
   },
 
   /**
@@ -50,6 +133,12 @@ export const sessionService = {
     }
 
     try {
+      // Save custom/selected question set to Supabase DB if questions exist
+      let questionSetId: string | null = null;
+      if (config.customQuestions && config.customQuestions.length > 0) {
+        questionSetId = await this.saveQuestionSet(config, config.customQuestions);
+      }
+
       // 1. Insert room record into Supabase rooms table
       const { data: room, error: roomError } = await supabase
         .from('rooms')
@@ -57,6 +146,7 @@ export const sessionService = {
           join_code: code,
           title: config.title.trim(),
           game_mode: config.mode || 'Standard',
+          question_set_id: questionSetId,
           max_players: 50,
           time_per_question_sec: config.timePerQuestionSec || 30,
           status: 'lobby',
@@ -66,7 +156,6 @@ export const sessionService = {
 
       if (roomError || !room) {
         console.warn('Supabase room creation notice:', roomError?.message);
-        // Fallback to local session scaffold if RLS or database error occurs
         return {
           success: true,
           code,
@@ -94,6 +183,7 @@ export const sessionService = {
         code: room.join_code,
         roomId: room.id,
         roomPlayerId: hostPlayer?.id,
+        questionSetId: room.question_set_id || undefined,
         message: `Session code ${room.join_code} initialized and persisted in Supabase database!`,
         details: { roomId: room.id, room },
       };
@@ -107,6 +197,7 @@ export const sessionService = {
       };
     }
   },
+
 
   /**
    * Looks up an existing room in Supabase DB by join code and registers participant.
@@ -252,4 +343,56 @@ export const sessionService = {
       .update({ status: newStatus })
       .eq('id', roomId);
   },
+
+  /**
+   * Fetches persisted questions for a question_set_id from Supabase DB.
+   */
+  async fetchRoomQuestions(questionSetId: string): Promise<ActiveQuestion[]> {
+    const status = getSupabaseConfigStatus();
+    if (!status.isConfigured || !questionSetId) return [];
+
+    try {
+      const { data: dbQuestions, error } = await supabase
+        .from('questions')
+        .select(`
+          id,
+          prompt,
+          explanation,
+          order_index,
+          question_options (
+            id,
+            option_key,
+            option_text,
+            order_index
+          )
+        `)
+        .eq('question_set_id', questionSetId)
+        .order('order_index', { ascending: true });
+
+      if (error || !dbQuestions) return [];
+
+      return dbQuestions.map(q => {
+        const sortedOpts = (q.question_options || [])
+          .sort((a, b) => (a.order_index || 0) - (b.order_index || 0))
+          .map(opt => ({
+            id: opt.id,
+            key: opt.option_key,
+            text: opt.option_text,
+          }));
+
+        return {
+          id: q.id,
+          prompt: q.prompt,
+          explanation: q.explanation || '',
+          category: 'Quantitative Aptitude',
+          options: sortedOpts,
+          correctOptionId: '', // Secret! Answers are evaluated securely on server / submitted option checks
+        };
+      });
+    } catch (err) {
+      console.warn('Error fetching room questions:', err);
+      return [];
+    }
+  },
 };
+
